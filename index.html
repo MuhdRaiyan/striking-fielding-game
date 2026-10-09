@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Softball Tactical Hitting: Find the Open Space</title>
+<style>
+  :root {
+    --field-green: #388e3c;
+    --dirt-brown: #c49a45;
+    --line-white: #ffffff;
+    --accent-blue: #1976d2;
+  }
+  * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  body {
+    margin: 0; padding: 16px;
+    background: #eceff1;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h2 { margin: 4px 0 12px 0; color: #263238; }
+  .controls {
+    display: flex; gap: 10px; margin-bottom: 12px; align-items: center;
+  }
+  select, button {
+    padding: 8px 14px; font-size: 15px; border-radius: 6px;
+    border: 1px solid #90a4ae; cursor: pointer; background: white;
+  }
+  button.action-btn { background: var(--accent-blue); color: white; border: none; font-weight: bold; }
+  .scenario-card {
+    background: white; padding: 12px 20px; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 12px;
+    max-width: 580px; width: 100%; text-align: center;
+  }
+  .scenario-title { font-weight: bold; color: #d32f2f; margin-bottom: 4px; }
+  .instructions { font-size: 14px; color: #546e7a; margin-top: 4px; }
+
+  /* Pitch / Field Layout */
+  #field-container {
+    position: relative; width: 480px; height: 460px;
+    background: var(--field-green); border-radius: 12px 12px 240px 240px;
+    overflow: hidden; border: 4px solid #2e7d32; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  /* Infield Dirt */
+  .infield-dirt {
+    position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%) rotate(45deg);
+    width: 220px; height: 220px; background: var(--dirt-brown); border: 2px dashed rgba(255,255,255,0.4);
+  }
+  /* Baseline lines */
+  .foul-line-left, .foul-line-right {
+    position: absolute; bottom: 35px; width: 3px; height: 350px; background: var(--line-white);
+  }
+  .foul-line-left { left: 50%; transform-origin: bottom center; transform: rotate(-45deg); }
+  .foul-line-right { left: 50%; transform-origin: bottom center; transform: rotate(45deg); }
+
+  /* Bases */
+  .base {
+    position: absolute; width: 18px; height: 18px; background: white;
+    transform: rotate(45deg); z-index: 2; border: 1px solid #333;
+  }
+  #home-plate { bottom: 28px; left: calc(50% - 9px); clip-path: polygon(50% 100%, 0 50%, 0 0, 100% 0, 100% 50%); border: none; }
+  #base-1 { right: 135px; bottom: 130px; }
+  #base-2 { left: calc(50% - 9px); bottom: 235px; }
+  #base-3 { left: 135px; bottom: 130px; }
+
+  /* Defenders (Red Markers) */
+  .defender {
+    position: absolute; width: 22px; height: 22px; background: #e53935;
+    border: 2px solid white; border-radius: 50%; z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 10px; font-weight: bold; cursor: default;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  /* Drop Zones */
+  .drop-zone {
+    position: absolute; border-radius: 8px; border: 2px dashed rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.15); z-index: 4; display: flex;
+    align-items: center; justify-content: center; color: rgba(255,255,255,0.9);
+    font-size: 11px; font-weight: bold; text-align: center; padding: 4px;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .drop-zone.drag-over { background: rgba(255, 235, 59, 0.45); border-color: #fbc02d; transform: scale(1.05); }
+
+  /* Draggable Softball */
+  .ball-source-area {
+    margin-top: 14px; display: flex; flex-direction: column; align-items: center;
+  }
+  #softball {
+    width: 36px; height: 36px; background: #ffeb3b; border-radius: 50%;
+    border: 2px solid #f57f17; box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+    cursor: grab; display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 16px; user-select: none;
+  }
+  #softball:active { cursor: grabbing; }
+
+  /* Feedback box */
+  #feedback-modal {
+    margin-top: 14px; max-width: 500px; width: 100%; padding: 12px 18px;
+    border-radius: 8px; text-align: center; font-size: 15px; display: none;
+  }
+  .feedback-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  .feedback-fail { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+</style>
+</head>
+<body>
+
+  <h2>🥎 Softball Space-Placement Challenge</h2>
+
+  <div class="controls">
+    <label for="base-select"><strong>Game Progression:</strong></label>
+    <select id="base-select" onchange="changeMode()">
+      <option value="1">1 Base Only (Tee-Ball / Beginner)</option>
+      <option value="2">2 Bases (Intermediate)</option>
+      <option value="3" selected>Full 3 Bases (Standard Softball)</option>
+    </select>
+    <button class="action-btn" onclick="loadNextScenario()">Next Scenario</button>
+  </div>
+
+  <div class="scenario-card">
+    <div id="scenario-title" class="scenario-title">Scenario 1: Outfield Overload</div>
+    <div id="scenario-desc" style="font-size: 15px; font-weight: 500;">Fielders are crowding Left Field and 3rd base line.</div>
+    <div class="instructions">Drag the softball from the batter's box and drop it into the best tactical space!</div>
+  </div>
+
+  <div id="field-container">
+    <div class="infield-dirt"></div>
+    <div class="foul-line-left"></div>
+    <div class="foul-line-right"></div>
+
+    <!-- Bases -->
+    <div class="base" id="home-plate" title="Home Plate"></div>
+    <div class="base" id="base-1" title="1st Base"></div>
+    <div class="base" id="base-2" title="2nd Base"></div>
+    <div class="base" id="base-3" title="3rd Base"></div>
+
+    <!-- Dynamic Elements injected by JS -->
+    <div id="defenders-layer"></div>
+    <div id="zones-layer"></div>
+  </div>
+
+  <div class="ball-source-area">
+    <div id="softball" draggable="true">🥎</div>
+    <span style="font-size: 12px; color: #607d8b; margin-top: 4px;">Drag the ball to place your hit</span>
+  </div>
+
+  <div id="feedback-modal"></div>
+
+<script>
+  // Scenarios defined per base mode
+  const scenariosData = {
+    1: [ // 1-Base Game (Beginner)
+      {
+        title: "1-Base Mode: Pitcher & 1st Base Crowded",
+        desc: "Defenders are playing shallow near 1st base and the mound. Where is the safest open gap?",
+        defenders: [
+          { label: "P", x: 230, y: 270 },
+          { label: "1B", x: 310, y: 310 }
+        ],
+        zones: [
+          { id: "left-gap", label: "Left Infield Gap", x: 90, y: 270, w: 100, h: 70, isBest: true, reason: "Correct! The left side is completely open, giving the batter plenty of time to reach 1st base safely." },
+          { id: "right-near", label: "Right Side Near 1B", x: 290, y: 270, w: 90, h: 70, isBest: false, reason: "Intercepted! 1st baseman is stationed right there for an easy tag or force out." }
+        ]
+      },
+      {
+        title: "1-Base Mode: Deep Shift",
+        desc: "The defenders backed up deep expecting a huge hit. Where can you place a soft hit/bunt?",
+        defenders: [
+          { label: "D1", x: 180, y: 190 },
+          { label: "D2", x: 280, y: 190 }
+        ],
+        zones: [
+          { id: "short-left", label: "Short Infield Grass", x: 170, y: 330, w: 130, h: 50, isBest: true, reason: "Excellent! A soft tap into shallow grass exploits the deep defensive depth." },
+          { id: "deep-center", label: "Deep Air Ball", x: 200, y: 150, w: 80, h: 60, isBest: false, reason: "Caught! Both fielders are playing deep and can easily catch this fly ball." }
+        ]
+      }
+    ],
+    2: [ // 2-Base Game (Intermediate)
+      {
+        title: "2-Base Mode: Infield Pinch",
+        desc: "Infielders have squeezed in close to prevent a quick run to 1st.",
+        defenders: [
+          { label: "1B", x: 300, y: 300 },
+          { label: "2B", x: 230, y: 240 },
+          { label: "3B", x: 150, y: 300 }
+        ],
+        zones: [
+          { id: "outfield-right", label: "Right Outfield Gap", x: 320, y: 150, w: 90, h: 80, isBest: true, reason: "Superb! Hitting over the drawn-in infield into the vacant right field ensures an easy double (2 bases)!" },
+          { id: "infield-center", label: "Mound / Infield", x: 200, y: 280, w: 80, h: 60, isBest: false, reason: "Fielded quickly! 3 infielders are crowded in the box." }
+        ]
+      }
+    ],
+    3: [ // Full 3-Base Game (Advanced)
+      {
+        title: "Full Game: Pull-Side Shift (Heavy Left)",
+        desc: "The defense anticipates a pull hitter; outfield and infield have shifted heavily to Left Field.",
+        defenders: [
+          { label: "LF", x: 80, y: 130 },
+          { label: "CF", x: 170, y: 110 },
+          { label: "SS", x: 140, y: 230 },
+          { label: "3B", x: 130, y: 300 },
+          { label: "1B", x: 320, y: 310 }
+        ],
+        zones: [
+          { id: "right-field-gap", label: "Deep Right Field Gap", x: 300, y: 130, w: 110, h: 90, isBest: true, reason: "Masterful read! Right field is completely abandoned. A placement here scores multiple bases!" },
+          { id: "left-outfield", label: "Left Outfield", x: 60, y: 150, w: 90, h: 80, isBest: false, reason: "Caught on the fly! LF and CF are both shaded directly to that area." },
+          { id: "shortstop-pocket", label: "Between 3B & SS", x: 120, y: 260, w: 60, h: 50, isBest: false, reason: "Fielded! The left side of the infield is clogged." }
+        ]
+      },
+      {
+        title: "Full Game: Infield Drawn In (Bases Loaded / Deep Gap Open)",
+        desc: "All infielders are hugging the baseline to cut off the runner at home. Outfield is shallow.",
+        defenders: [
+          { label: "1B", x: 310, y: 330 },
+          { label: "2B", x: 260, y: 280 },
+          { label: "SS", x: 200, y: 280 },
+          { label: "3B", x: 140, y: 330 },
+          { label: "OF", x: 220, y: 180 }
+        ],
+        zones: [
+          { id: "deep-left-center", label: "Deep Outfield Gaps", x: 100, y: 80, w: 120, h: 70, isBest: true, reason: "Touchdown! Driving the ball over the shallow fielders clears the bases!" },
+          { id: "ground-home", label: "Sharp Grounder to 3B", x: 130, y: 320, w: 70, h: 40, isBest: false, reason: "Out at home! 3rd base charges in and makes the force out at home plate." }
+        ]
+      }
+    ]
+  };
+
+  let currentMode = 3;
+  let scenarioIndex = 0;
+
+  function initGame() {
+    updateBaseVisibility();
+    renderScenario();
+    setupDragEvents();
+  }
+
+  function changeMode() {
+    currentMode = parseInt(document.getElementById('base-select').value);
+    scenarioIndex = 0;
+    updateBaseVisibility();
+    renderScenario();
+  }
+
+  function updateBaseVisibility() {
+    document.getElementById('base-1').style.display = 'block';
+    document.getElementById('base-2').style.display = currentMode >= 2 ? 'block' : 'none';
+    document.getElementById('base-3').style.display = currentMode >= 3 ? 'block' : 'none';
+  }
+
+  function renderScenario() {
+    const scenarios = scenariosData[currentMode];
+    const s = scenarios[scenarioIndex % scenarios.length];
+
+    document.getElementById('scenario-title').innerText = s.title;
+    document.getElementById('scenario-desc').innerText = s.desc;
+    document.getElementById('feedback-modal').style.display = 'none';
+
+    // Render Defenders
+    const defLayer = document.getElementById('defenders-layer');
+    defLayer.innerHTML = '';
+    s.defenders.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'defender';
+      el.innerText = d.label;
+      el.style.left = d.x + 'px';
+      el.style.top = d.y + 'px';
+      defLayer.appendChild(el);
+    });
+
+    // Render Drop Zones
+    const zoneLayer = document.getElementById('zones-layer');
+    zoneLayer.innerHTML = '';
+    s.zones.forEach(z => {
+      const el = document.createElement('div');
+      el.className = 'drop-zone';
+      el.id = z.id;
+      el.innerText = z.label;
+      el.style.left = z.x + 'px';
+      el.style.top = z.y + 'px';
+      el.style.width = z.w + 'px';
+      el.style.height = z.h + 'px';
+      el.dataset.best = z.isBest;
+      el.dataset.reason = z.reason;
+
+      el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
+      el.addEventListener('dragleave', () => { el.classList.remove('drag-over'); });
+      el.addEventListener('drop', (e) => handleDrop(e, z));
+
+      zoneLayer.appendChild(el);
+    });
+  }
+
+  function setupDragEvents() {
+    const ball = document.getElementById('softball');
+    ball.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', 'ball');
+    });
+  }
+
+  function handleDrop(e, zone) {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+
+    const feedback = document.getElementById('feedback-modal');
+    feedback.style.display = 'block';
+
+    if (zone.isBest) {
+      feedback.className = 'feedback-success';
+      feedback.innerHTML = `<strong>Safe Hit! 🎉</strong><br>${zone.reason}`;
+    } else {
+      feedback.className = 'feedback-fail';
+      feedback.innerHTML = `<strong>Out / Intercepted! ❌</strong><br>${zone.reason}`;
+    }
+  }
+
+  function loadNextScenario() {
+    scenarioIndex++;
+    renderScenario();
+  }
+
+  window.onload = initGame;
+</script>
+</body>
+</html>
